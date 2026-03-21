@@ -8,7 +8,8 @@
     <!-- TensorFlow -->
     <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.10.0"></script>
 
-    <link rel="stylesheet" href="style.css">
+    <!-- ✅ FIXED CSS PATH -->
+    <link rel="stylesheet" href="css/style.css">
 </head>
 
 <body onload="init()">
@@ -23,12 +24,13 @@
         <button onclick="startCamera()" class="btn">Camera</button>
     </div>
 
-    <h2 id="result">-</h2>
+    <h2 id="result">Loading...</h2>
     <p id="confidence">Confidence: -</p>
 
-    <video id="camera" autoplay></video>
+    <video id="camera" autoplay playsinline></video>
 
-    <script src="main.js"></script>
+    <!-- ✅ FIXED JS PATH -->
+    <script src="js/main.js"></script>
 
 </body>
 </html>
