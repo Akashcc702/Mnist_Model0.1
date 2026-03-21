@@ -7,22 +7,34 @@ let predictTimeout;
 async function init() {
     document.getElementById("result").innerText = "Loading...";
 
-    model = await tf.loadLayersModel(
-        "https://cdn.jsdelivr.net/gh/Akashcc702/Mnist_Model/model/mnist_model.json"
-    );
+    try {
+        // ✅ FIXED MODEL PATH (your current repo)
+        model = await tf.loadLayersModel(
+            "https://cdn.jsdelivr.net/gh/Akashcc702/Mnist_Model0.1/model/mnist_model.json"
+        );
 
-    document.getElementById("result").innerText = "Ready";
+        document.getElementById("result").innerText = "Ready ✅";
+        console.log("MODEL LOADED SUCCESS");
+
+    } catch (err) {
+        console.error("MODEL LOAD ERROR:", err);
+        document.getElementById("result").innerText = "Model Error ❌";
+        return;
+    }
 
     canvas = document.getElementById("sketchpad");
     ctx = canvas.getContext("2d");
 
+    // black background
     ctx.fillStyle = "black";
     ctx.fillRect(0, 0, canvas.width, canvas.height);
 
+    // mouse
     canvas.addEventListener("mousedown", () => drawing = true);
     canvas.addEventListener("mouseup", stopDraw);
     canvas.addEventListener("mousemove", draw);
 
+    // touch
     canvas.addEventListener("touchstart", (e) => {
         e.preventDefault();
         drawing = true;
@@ -70,6 +82,7 @@ function clearCanvas() {
     ctx.fillRect(0, 0, canvas.width, canvas.height);
 
     document.getElementById("result").innerText = "-";
+    document.getElementById("confidence").innerText = "Confidence: -";
 }
 
 // ===== PREPROCESS =====
@@ -93,8 +106,9 @@ function preprocess(sourceCanvas) {
 
 // ===== SINGLE PREDICT =====
 function predict() {
-    let input = preprocess(canvas);
+    if (!model) return;
 
+    let input = preprocess(canvas);
     let pred = model.predict(input);
     let probs = pred.dataSync();
 
@@ -110,6 +124,8 @@ function predict() {
 
 // ===== MULTI DIGIT =====
 function predictMultiple() {
+    if (!model) return;
+
     let width = canvas.width;
     let height = canvas.height;
 
@@ -136,7 +152,17 @@ function predictMultiple() {
             dCanvas.width = x - start;
             dCanvas.height = height;
 
-            dCanvas.getContext("2d").drawImage(canvas, start, 0, x - start, height, 0, 0, dCanvas.width, dCanvas.height);
+            dCanvas.getContext("2d").drawImage(
+                canvas,
+                start,
+                0,
+                x - start,
+                height,
+                0,
+                0,
+                dCanvas.width,
+                dCanvas.height
+            );
 
             digits.push(dCanvas);
             start = null;
@@ -155,17 +181,29 @@ function predictMultiple() {
         tf.dispose([input, pred]);
     });
 
-    document.getElementById("result").innerText = result;
+    document.getElementById("result").innerText = result || "-";
 }
 
 // ===== CAMERA =====
 async function startCamera() {
+    if (!navigator.mediaDevices) {
+        alert("Camera not supported");
+        return;
+    }
+
     let video = document.getElementById("camera");
 
-    let stream = await navigator.mediaDevices.getUserMedia({ video: true });
-    video.srcObject = stream;
+    try {
+        let stream = await navigator.mediaDevices.getUserMedia({ video: true });
+        video.srcObject = stream;
+    } catch (err) {
+        alert("Camera permission denied");
+        return;
+    }
 
     setInterval(() => {
+        if (!model) return;
+
         let temp = document.createElement("canvas");
         temp.width = 28;
         temp.height = 28;
@@ -183,4 +221,4 @@ async function startCamera() {
         tf.dispose([input, pred]);
 
     }, 1000);
-          }
+}
