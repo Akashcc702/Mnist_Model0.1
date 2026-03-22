@@ -2,22 +2,21 @@ let model;
 let canvas, ctx;
 let drawing = false;
 let predictTimeout;
+let cameraInterval;
 
 // ===== INIT =====
 async function init() {
     document.getElementById("result").innerText = "Loading...";
 
     try {
-        // ✅ FIXED MODEL PATH (your current repo)
-        model = await tf.loadLayersModel(
-            "https://cdn.jsdelivr.net/gh/Akashcc702/Mnist_Model0.1/model/mnist_model.json"
-        );
+        // ✅ LOCAL PATH (BEST FIX)
+        model = await tf.loadLayersModel("model/mnist_model.json");
 
         document.getElementById("result").innerText = "Ready ✅";
-        console.log("MODEL LOADED SUCCESS");
+        console.log("MODEL LOADED");
 
     } catch (err) {
-        console.error("MODEL LOAD ERROR:", err);
+        console.error("MODEL ERROR:", err);
         document.getElementById("result").innerText = "Model Error ❌";
         return;
     }
@@ -25,9 +24,7 @@ async function init() {
     canvas = document.getElementById("sketchpad");
     ctx = canvas.getContext("2d");
 
-    // black background
-    ctx.fillStyle = "black";
-    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    clearCanvas();
 
     // mouse
     canvas.addEventListener("mousedown", () => drawing = true);
@@ -73,7 +70,7 @@ function draw(e) {
     ctx.moveTo(x, y);
 
     clearTimeout(predictTimeout);
-    predictTimeout = setTimeout(predict, 400);
+    predictTimeout = setTimeout(predict, 300); // faster
 }
 
 // ===== CLEAR =====
@@ -85,14 +82,19 @@ function clearCanvas() {
     document.getElementById("confidence").innerText = "Confidence: -";
 }
 
-// ===== PREPROCESS =====
+// ===== CENTER + RESIZE (ACCURACY BOOST) =====
 function preprocess(sourceCanvas) {
     let temp = document.createElement("canvas");
     temp.width = 28;
     temp.height = 28;
 
     let tctx = temp.getContext("2d");
-    tctx.drawImage(sourceCanvas, 0, 0, 28, 28);
+
+    // center drawing
+    tctx.fillStyle = "black";
+    tctx.fillRect(0, 0, 28, 28);
+
+    tctx.drawImage(sourceCanvas, 4, 4, 20, 20);
 
     let img = tctx.getImageData(0, 0, 28, 28).data;
 
@@ -106,6 +108,128 @@ function preprocess(sourceCanvas) {
 
 // ===== SINGLE PREDICT =====
 function predict() {
+    if (!model) return;
+
+    tf.tidy(() => {
+        let input = preprocess(canvas);
+        let pred = model.predict(input);
+        let probs = pred.dataSync();
+
+        let max = Math.max(...probs);
+        let result = probs.indexOf(max);
+
+        document.getElementById("result").innerText = result;
+        document.getElementById("confidence").innerText =
+            "Confidence: " + (max * 100).toFixed(2) + "%";
+    });
+}
+
+// ===== MULTI DIGIT =====
+function predictMultiple() {
+    if (!model) return;
+
+    let width = canvas.width;
+    let height = canvas.height;
+
+    let imgData = ctx.getImageData(0, 0, width, height).data;
+
+    let digits = [];
+    let start = null;
+
+    for (let x = 0; x < width; x++) {
+        let hasPixel = false;
+
+        for (let y = 0; y < height; y++) {
+            let i = (y * width + x) * 4;
+            if (imgData[i] > 50) {
+                hasPixel = true;
+                break;
+            }
+        }
+
+        if (hasPixel && start === null) start = x;
+
+        if (!hasPixel && start !== null) {
+            let w = x - start;
+            if (w > 5) { // ignore noise
+                let dCanvas = document.createElement("canvas");
+                dCanvas.width = w;
+                dCanvas.height = height;
+
+                dCanvas.getContext("2d").drawImage(
+                    canvas,
+                    start,
+                    0,
+                    w,
+                    height,
+                    0,
+                    0,
+                    w,
+                    height
+                );
+
+                digits.push(dCanvas);
+            }
+            start = null;
+        }
+    }
+
+    let result = "";
+
+    digits.forEach(d => {
+        tf.tidy(() => {
+            let input = preprocess(d);
+            let pred = model.predict(input);
+            let probs = pred.dataSync();
+
+            result += probs.indexOf(Math.max(...probs));
+        });
+    });
+
+    document.getElementById("result").innerText = result || "-";
+}
+
+// ===== CAMERA =====
+async function startCamera() {
+    if (!navigator.mediaDevices) {
+        alert("Camera not supported");
+        return;
+    }
+
+    let video = document.getElementById("camera");
+
+    try {
+        let stream = await navigator.mediaDevices.getUserMedia({ video: true });
+        video.srcObject = stream;
+    } catch (err) {
+        alert("Camera permission denied");
+        return;
+    }
+
+    // ❌ prevent multiple intervals
+    if (cameraInterval) clearInterval(cameraInterval);
+
+    cameraInterval = setInterval(() => {
+        if (!model) return;
+
+        tf.tidy(() => {
+            let temp = document.createElement("canvas");
+            temp.width = 28;
+            temp.height = 28;
+
+            let ctx2 = temp.getContext("2d");
+            ctx2.drawImage(video, 0, 0, 28, 28);
+
+            let input = preprocess(temp);
+            let pred = model.predict(input);
+            let probs = pred.dataSync();
+
+            let result = probs.indexOf(Math.max(...probs));
+            document.getElementById("result").innerText = result;
+        });
+
+    }, 500); // faster
+}function predict() {
     if (!model) return;
 
     let input = preprocess(canvas);
