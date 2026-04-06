@@ -519,41 +519,155 @@ function stopCamera() {
 async function captureAndPredict() {
   if (!model || !cameraStream) return;
 
-  const video = document.getElementById('camera-video');
+  const video   = document.getElementById('camera-video');
   const camCanvas = document.getElementById('camera-canvas');
-  const camCtx = camCanvas.getContext('2d');
+  const camCtx  = camCanvas.getContext('2d');
+  const threshold = parseInt(document.getElementById('threshold_slider').value);
 
-  // Draw video frame
-  camCanvas.width = video.videoWidth || 300;
-  camCanvas.height = video.videoHeight || 300;
-  camCtx.drawImage(video, 0, 0, camCanvas.width, camCanvas.height);
+  // ── Step 1: Capture only the guide-box crop (centre square 60% of shorter dim) ──
+  const vw = video.videoWidth  || 300;
+  const vh = video.videoHeight || 300;
+  const cropSize = Math.floor(Math.min(vw, vh) * 0.6);
+  const cx = Math.floor((vw - cropSize) / 2);
+  const cy = Math.floor((vh - cropSize) / 2);
 
-  // Convert to grayscale and invert (paper = white bg, black digit → MNIST: black bg, white digit)
-  const imgData = camCtx.getImageData(0, 0, camCanvas.width, camCanvas.height);
-  const d = imgData.data;
+  camCanvas.width  = cropSize;
+  camCanvas.height = cropSize;
+  camCtx.drawImage(video, cx, cy, cropSize, cropSize, 0, 0, cropSize, cropSize);
+
+  // ── Step 2: Show "captured" preview ──
+  const prevCap = document.getElementById('preview-captured');
+  prevCap.getContext('2d').drawImage(camCanvas, 0, 0, 84, 84);
+
+  // ── Step 3: Grayscale + Adaptive threshold + Invert ──
+  const raw = camCtx.getImageData(0, 0, cropSize, cropSize);
+  const d   = raw.data;
+
+  // Convert to grayscale
+  const gray = new Float32Array(cropSize * cropSize);
   for (let i = 0; i < d.length; i += 4) {
-    const gray = 0.299 * d[i] + 0.587 * d[i+1] + 0.114 * d[i+2];
-    // Invert: paper (light) → black, ink (dark) → white
-    const inv = 255 - gray;
-    d[i] = d[i+1] = d[i+2] = inv;
-    d[i+3] = 255;
+    gray[i >> 2] = 0.299 * d[i] + 0.587 * d[i+1] + 0.114 * d[i+2];
   }
-  camCtx.putImageData(imgData, 0, 0);
 
-  // Preprocess and predict
-  const tensor = preprocessCanvas(camCanvas);
-  const pred = model.predict(tensor);
-  const probs = Array.from(pred.dataSync());
-  const max = Math.max(...probs);
-  const digit = probs.indexOf(max);
+  // Compute local mean with a simple box blur (radius = 15% of cropSize)
+  const radius = Math.max(10, Math.floor(cropSize * 0.15));
+  const localMean = computeBoxBlur(gray, cropSize, cropSize, radius);
+
+  // Binary threshold: pixel is "ink" if it is darker than local mean minus offset
+  const offset = threshold - 100; // centred at 0; user slides +/-100
+  for (let j = 0; j < gray.length; j++) {
+    // ink (dark) → white (255), paper (light) → black (0)
+    const isInk = gray[j] < localMean[j] - offset;
+    const val   = isInk ? 255 : 0;
+    const base  = j * 4;
+    d[base] = d[base+1] = d[base+2] = val;
+    d[base+3] = 255;
+  }
+  camCtx.putImageData(raw, 0, 0);
+
+  // ── Step 4: Show "processed" preview ──
+  const prevProc = document.getElementById('preview-processed');
+  prevProc.getContext('2d').drawImage(camCanvas, 0, 0, 84, 84);
+
+  // ── Step 5: Bounding-box crop → centre → pad → 28×28 ──
+  const mnistCanvas = preprocessCameraCanvas(camCanvas);
+
+  // Show model-input preview
+  const prevMn = document.getElementById('preview-mnist');
+  prevMn.getContext('2d').drawImage(mnistCanvas, 0, 0, 84, 84);
+
+  // ── Step 6: Predict ──
+  const pixels = mnistCanvas.getContext('2d').getImageData(0, 0, 28, 28).data;
+  const input  = [];
+  for (let i = 0; i < pixels.length; i += 4) input.push(pixels[i] / 255.0);
+
+  const tensor = tf.tensor(input).reshape([1, 28, 28, 1]);
+  const pred   = model.predict(tensor);
+  const probs  = Array.from(pred.dataSync());
+  const max    = Math.max(...probs);
+  const digit  = probs.indexOf(max);
   tf.dispose([tensor, pred]);
 
   const confPct = (max * 100).toFixed(1);
-  document.getElementById('camera-result').textContent = digit;
+  document.getElementById('camera-result').textContent    = digit;
   document.getElementById('camera-confidence').textContent = `Confidence: ${confPct}%`;
 
   speak(digit, false);
   addToHistory(digit, confPct, null);
+}
+
+// ── Box blur helper (separable, O(n)) ──
+function computeBoxBlur(gray, W, H, r) {
+  const out = new Float32Array(gray.length);
+  const tmp = new Float32Array(gray.length);
+
+  // Horizontal pass
+  for (let y = 0; y < H; y++) {
+    let sum = 0, count = 0;
+    for (let x = 0; x < W; x++) {
+      sum   += gray[y * W + x];
+      count += 1;
+      if (x > r) { sum -= gray[y * W + (x - r - 1)]; count--; }
+      tmp[y * W + x] = sum / count;
+    }
+  }
+
+  // Vertical pass
+  for (let x = 0; x < W; x++) {
+    let sum = 0, count = 0;
+    for (let y = 0; y < H; y++) {
+      sum   += tmp[y * W + x];
+      count += 1;
+      if (y > r) { sum -= tmp[(y - r - 1) * W + x]; count--; }
+      out[y * W + x] = sum / count;
+    }
+  }
+  return out;
+}
+
+// ── Preprocess binary camera canvas → 28×28 MNIST canvas ──
+function preprocessCameraCanvas(src) {
+  const W = src.width, H = src.height;
+  const d = src.getContext('2d').getImageData(0, 0, W, H).data;
+
+  // Find bounding box of white (ink) pixels
+  let minX = W, minY = H, maxX = 0, maxY = 0, any = false;
+  for (let y = 0; y < H; y++) {
+    for (let x = 0; x < W; x++) {
+      if (d[(y * W + x) * 4] > 128) {
+        if (x < minX) minX = x;
+        if (x > maxX) maxX = x;
+        if (y < minY) minY = y;
+        if (y > maxY) maxY = y;
+        any = true;
+      }
+    }
+  }
+
+  const mn = document.createElement('canvas');
+  mn.width = mn.height = 28;
+  const mCtx = mn.getContext('2d');
+  mCtx.fillStyle = '#000';
+  mCtx.fillRect(0, 0, 28, 28);
+
+  if (!any) return mn; // blank
+
+  const bw = maxX - minX + 1, bh = maxY - minY + 1;
+  const sz = Math.max(bw, bh);
+  const ox = minX - Math.floor((sz - bw) / 2);
+  const oy = minY - Math.floor((sz - bh) / 2);
+  const pad = Math.floor(sz * 0.25);
+  const fs  = sz + pad * 2;
+
+  const tmp = document.createElement('canvas');
+  tmp.width = tmp.height = fs;
+  const tCtx = tmp.getContext('2d');
+  tCtx.fillStyle = '#000';
+  tCtx.fillRect(0, 0, fs, fs);
+  tCtx.drawImage(src, ox, oy, sz, sz, pad, pad, sz, sz);
+
+  mCtx.drawImage(tmp, 0, 0, 28, 28);
+  return mn;
 }
 
 // ===== THEME =====
