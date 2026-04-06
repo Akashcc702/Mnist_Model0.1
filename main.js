@@ -1,0 +1,178 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>Digit Recognition</title>
+  <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="css/styles.css">
+  <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.10.0"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+</head>
+<body onload="init()">
+
+  <!-- HEADER -->
+  <header class="app-header">
+    <div class="header-content">
+      <div class="header-title">
+        <span class="header-icon">🧠</span>
+        <h1>Digit Recognition</h1>
+      </div>
+      <div class="header-controls">
+        <select id="language_select" class="lang-select">
+          <option value="en">🇬🇧 English</option>
+          <option value="kn">🇮🇳 ಕನ್ನಡ</option>
+        </select>
+        <label class="voice-toggle">
+          <input type="checkbox" id="voice_toggle" checked>
+          <span class="toggle-slider"></span>
+          <span class="toggle-label">🔊</span>
+        </label>
+        <button class="theme-btn" onclick="toggleTheme()">🌙</button>
+      </div>
+    </div>
+  </header>
+
+  <!-- TABS -->
+  <nav class="tab-nav">
+    <button class="tab-btn active" onclick="switchTab('draw', this)">✏️ Draw</button>
+    <button class="tab-btn" onclick="switchTab('camera', this)">📷 Camera</button>
+    <button class="tab-btn" onclick="switchTab('quiz', this)">🎮 Quiz</button>
+  </nav>
+
+  <!-- ========== DRAW TAB ========== -->
+  <div id="tab-draw" class="tab-content active">
+    <div class="canvas-wrapper">
+      <canvas id="sketchpad" width="300" height="300"></canvas>
+      <div class="canvas-hint" id="canvas-hint">Draw a digit here</div>
+    </div>
+
+    <div class="brush-control">
+      <span class="brush-label">🖊️</span>
+      <input type="range" id="brush_size" min="8" max="40" value="22" oninput="updateBrush(this.value)">
+      <span class="brush-label">🖌️</span>
+      <span class="brush-value" id="brush_display">22</span>
+    </div>
+
+    <div class="btn-row">
+      <button class="btn btn-secondary" onclick="undo()" id="undo_btn" disabled>↩️ Undo</button>
+      <button class="btn btn-predict" onclick="predict()">🔍 Predict</button>
+      <button class="btn btn-danger" onclick="clearCanvas()">🗑️ Clear</button>
+    </div>
+
+    <div class="result-card" id="result-card">
+      <div class="result-main">
+        <div class="result-label">Prediction</div>
+        <div class="result-number" id="result">-</div>
+      </div>
+      <div class="result-confidence" id="confidence">Confidence: -</div>
+    </div>
+
+    <div class="chart-container">
+      <h4>Confidence per digit</h4>
+      <canvas id="myChart"></canvas>
+    </div>
+  </div>
+
+  <!-- ========== CAMERA TAB ========== -->
+  <div id="tab-camera" class="tab-content hidden">
+    <div class="camera-section">
+      <div class="video-wrapper">
+        <video id="camera-video" autoplay playsinline muted></video>
+        <canvas id="camera-canvas" width="300" height="300" class="hidden"></canvas>
+        <div class="camera-overlay">
+          <div class="camera-guide">
+            <span>Place digit here</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="btn-row">
+        <button class="btn btn-secondary" onclick="startCamera()" id="start_camera_btn">📷 Start Camera</button>
+        <button class="btn btn-predict" onclick="captureAndPredict()" id="capture_btn" disabled>📸 Capture</button>
+        <button class="btn btn-danger" onclick="stopCamera()" id="stop_camera_btn" disabled>⏹️ Stop</button>
+      </div>
+
+      <div class="camera-note">
+        📝 Write digit on white paper, hold to camera
+      </div>
+
+      <div class="result-card" id="camera-result-card">
+        <div class="result-main">
+          <div class="result-label">Camera Prediction</div>
+          <div class="result-number" id="camera-result">-</div>
+        </div>
+        <div class="result-confidence" id="camera-confidence">Confidence: -</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ========== QUIZ TAB ========== -->
+  <div id="tab-quiz" class="tab-content hidden">
+    <div class="quiz-section">
+      <!-- Score board -->
+      <div class="score-board">
+        <div class="score-item">
+          <span class="score-num" id="quiz-correct">0</span>
+          <span class="score-label">✅ Correct</span>
+        </div>
+        <div class="score-item">
+          <span class="score-num" id="quiz-total">0</span>
+          <span class="score-label">📊 Total</span>
+        </div>
+        <div class="score-item">
+          <span class="score-num" id="quiz-accuracy">0%</span>
+          <span class="score-label">🎯 Accuracy</span>
+        </div>
+      </div>
+
+      <!-- Quiz prompt -->
+      <div class="quiz-prompt" id="quiz-prompt">
+        <div class="quiz-prompt-text">Press Start to play!</div>
+      </div>
+
+      <!-- Canvas -->
+      <div class="canvas-wrapper">
+        <canvas id="quiz-canvas" width="300" height="300"></canvas>
+      </div>
+
+      <div class="brush-control">
+        <span class="brush-label">🖊️</span>
+        <input type="range" id="quiz_brush_size" min="8" max="40" value="22" oninput="updateQuizBrush(this.value)">
+        <span class="brush-label">🖌️</span>
+      </div>
+
+      <div class="btn-row">
+        <button class="btn btn-secondary" onclick="undoQuiz()" id="quiz_undo_btn" disabled>↩️ Undo</button>
+        <button class="btn btn-predict" onclick="checkQuizAnswer()" id="quiz_check_btn" disabled>✅ Check</button>
+        <button class="btn btn-danger" onclick="clearQuizCanvas()">🗑️ Clear</button>
+      </div>
+
+      <div class="btn-row">
+        <button class="btn btn-green" onclick="startQuiz()" id="quiz_start_btn">▶️ Start Quiz</button>
+        <button class="btn btn-secondary" onclick="nextQuizRound()" id="quiz_next_btn" disabled>⏭️ Next</button>
+        <button class="btn btn-danger" onclick="resetQuiz()">🔄 Reset</button>
+      </div>
+
+      <div class="quiz-feedback" id="quiz-feedback"></div>
+    </div>
+  </div>
+
+  <!-- ========== HISTORY SECTION ========== -->
+  <section class="history-section">
+    <div class="history-header">
+      <h4>📋 Recent Predictions</h4>
+      <div class="history-stats">
+        <span id="hist-total">0 predictions</span>
+        <span id="hist-accuracy" class="hidden">| Accuracy: <b id="hist-acc-val">0%</b></span>
+      </div>
+      <button class="clear-history-btn" onclick="clearHistory()">Clear</button>
+    </div>
+    <div class="history-list" id="history-list">
+      <div class="history-empty">No predictions yet. Start drawing!</div>
+    </div>
+  </section>
+
+  <script src="js/main.js"></script>
+</body>
+</html>
