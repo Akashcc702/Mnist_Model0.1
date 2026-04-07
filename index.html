@@ -36,7 +36,6 @@
   <!-- TABS -->
   <nav class="tab-nav">
     <button class="tab-btn active" onclick="switchTab('draw', this)">✏️ Draw</button>
-    <button class="tab-btn" onclick="switchTab('camera', this)">📷 Camera</button>
     <button class="tab-btn" onclick="switchTab('quiz', this)">🎮 Quiz</button>
   </nav>
 
@@ -75,89 +74,8 @@
   </div>
 
   <!-- ========== CAMERA TAB ========== -->
-  <div id="tab-camera" class="tab-content">
-    <div class="camera-section">
 
-      <!-- Live video -->
-      <div class="video-wrapper">
-        <video id="camera-video" autoplay playsinline muted></video>
-        <canvas id="camera-canvas" width="300" height="300" class="hidden"></canvas>
-        <!-- Guide box -->
-        <div class="camera-overlay">
-          <div class="camera-guide">
-            <span>ಇಲ್ಲಿ digit ತೋರಿಸಿ</span>
-          </div>
-        </div>
-      </div>
-
-      <!-- Preview: what model sees -->
-      <div class="preview-row">
-        <div class="preview-box">
-          <div class="preview-label">📷 Captured</div>
-          <canvas id="preview-captured" width="84" height="84"></canvas>
-        </div>
-        <div class="preview-arrow">→</div>
-        <div class="preview-box">
-          <div class="preview-label">🔲 Processed</div>
-          <canvas id="preview-processed" width="84" height="84" class="preview-dark"></canvas>
-        </div>
-        <div class="preview-arrow">→</div>
-        <div class="preview-box">
-          <div class="preview-label">🤖 Model input</div>
-          <canvas id="preview-mnist" width="84" height="84" class="preview-dark"></canvas>
-        </div>
-      </div>
-
-      <!-- Threshold slider -->
-      <div class="brush-control">
-        <span class="brush-label" title="Brightness threshold for ink detection">⚡ Threshold</span>
-        <input type="range" id="threshold_slider" min="30" max="200" value="100"
-               oninput="document.getElementById('threshold_val').textContent=this.value">
-        <span class="brush-value" id="threshold_val">100</span>
-      </div>
-
-      <div class="btn-row">
-        <button class="btn btn-secondary" onclick="startCamera()" id="start_camera_btn">📷 Start</button>
-        <button class="btn btn-predict"   onclick="captureAndPredict()" id="capture_btn" disabled>📸 Capture</button>
-        <button class="btn btn-danger"    onclick="stopCamera()" id="stop_camera_btn" disabled>⏹️ Stop</button>
-      </div>
-
-      <div class="camera-note">
-        💡 <b>Tips:</b> ಬಿಳಿ paper ಮೇಲೆ ದಪ್ಪ dark ink ನಲ್ಲಿ ಬರೆಯಿರಿ · Good light ಇರಲಿ · Guide box ನಲ್ಲಿ digit ಇರಲಿ
-      </div>
-
-      <div class="result-card" id="camera-result-card">
-        <div class="result-main">
-          <div class="result-label">Camera Prediction</div>
-          <div class="result-number" id="camera-result">-</div>
-        </div>
-        <div class="result-confidence" id="camera-confidence">Confidence: -</div>
-      </div>
-    </div>
-  </div>
-
-
-      <div class="btn-row">
-        <button class="btn btn-secondary" onclick="startCamera()" id="start_camera_btn">📷 Start Camera</button>
-        <button class="btn btn-predict" onclick="captureAndPredict()" id="capture_btn" disabled>📸 Capture</button>
-        <button class="btn btn-danger" onclick="stopCamera()" id="stop_camera_btn" disabled>⏹️ Stop</button>
-      </div>
-
-      <div class="camera-note">
-        📝 Write digit on white paper, hold to camera
-      </div>
-
-      <div class="result-card" id="camera-result-card">
-        <div class="result-main">
-          <div class="result-label">Camera Prediction</div>
-          <div class="result-number" id="camera-result">-</div>
-        </div>
-        <div class="result-confidence" id="camera-confidence">Confidence: -</div>
-      </div>
-    </div>
-  </div>
-
-  <!-- ========== QUIZ TAB ========== -->
+<!-- ========== QUIZ TAB ========== -->
   <div id="tab-quiz" class="tab-content">
     <div class="quiz-section">
       <!-- Score board -->
